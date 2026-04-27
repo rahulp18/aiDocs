@@ -19,6 +19,7 @@ export class DocumentController {
   }
   @Post('search')
   async search(@Body('query') query: string) {
+    console.log({ query });
     return this.documentService.search(query);
   }
 }

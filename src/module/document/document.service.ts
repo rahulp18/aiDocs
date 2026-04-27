@@ -55,16 +55,31 @@ export class DocumentService {
     };
   }
   async search(query: string) {
-    if (!query.trim()) {
+    if (!query?.trim()) {
       throw new BadRequestException('Query cannot be empty');
     }
     const queryEmbedding = await this.embeddingService.generateEmbedding(query);
     const results = await this.documentRepository.searchSimilarChunks(
       queryEmbedding,
-      5,
+      10,
     );
-    const context = results.rows.map((r) => r.content);
-    return this.llmService.generateAnswer(query, context as string[]);
+    const THRESHOLD = 0.7;
+    const filtered = results.rows.filter((r: any) => r.distance >= THRESHOLD);
+    const sorted = filtered.sort((a: any, b: any) => b.distance - a.distance);
+    const topChunk = sorted.slice(0, 5);
+    if (topChunk.length === 0) {
+      return {
+        answer: 'No Relevant Information Found',
+        sources: [],
+      };
+    }
+
+    const context = topChunk.map((r) => r.content);
+    const answer = this.llmService.generateAnswer(query, context as string[]);
+    return {
+      answer,
+      sources: topChunk,
+    };
   }
   private chunkText(text: string, size = 500) {
     const chunks: ChunkType[] = [];
