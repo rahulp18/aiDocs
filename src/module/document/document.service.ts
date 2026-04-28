@@ -1,13 +1,13 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PDFParse } from 'pdf-parse';
 import { v4 as uuid } from 'uuid';
+import { ChunkingService } from '../rag/chunking.service';
 import { DocumentRepository } from './document.repository';
-import { EmbeddingService } from './embedding.service';
-import { LlmService } from './llm.service';
 
-type ChunkType = {
-  content: string;
-};
+import { EmbeddingService } from '../rag/embedding.service';
+import { LlmService } from './llm.service';
 
 @Injectable()
 export class DocumentService {
@@ -15,6 +15,7 @@ export class DocumentService {
     private readonly documentRepository: DocumentRepository,
     private readonly embeddingService: EmbeddingService,
     private readonly llmService: LlmService,
+    private readonly chunkingService: ChunkingService,
   ) {}
 
   async processFile(file: Express.Multer.File) {
@@ -31,27 +32,28 @@ export class DocumentService {
       throw new BadRequestException('Could not extract text from PDF');
     }
 
-    const chunks = this.chunkText(text);
+    const chunks = await this.chunkingService.semanticChunk(text);
     const documentId = uuid();
 
     // 1️ Insert chunks (embedding = null)
-    const insertedChunks = await this.documentRepository.createChunks(
-      documentId,
-      chunks.map((c) => ({ ...c, embedding: null })),
-    );
+    // const insertedChunks = await this.documentRepository.createChunks(
+    //   documentId,
+    //   chunks,
+    // );
 
     // 2️  Generate embeddings + update
-    for (const chunk of insertedChunks) {
-      const embedding = await this.embeddingService.generateEmbedding(
-        chunk.content,
-      );
+    // for (const chunk of insertedChunks) {
+    //   const embedding = await this.embeddingService.generateEmbedding(
+    //     chunk.content,
+    //   );
 
-      await this.documentRepository.updateEmbedding(chunk.id, embedding);
-    }
+    //   await this.documentRepository.updateEmbedding(chunk.id, embedding);
+    // }
 
     return {
       totalChunks: chunks.length,
       documentId,
+      chunks,
     };
   }
   async search(query: string) {
@@ -80,15 +82,5 @@ export class DocumentService {
       answer,
       sources: topChunk,
     };
-  }
-  private chunkText(text: string, size = 500) {
-    const chunks: ChunkType[] = [];
-
-    for (let i = 0; i < text.length; i += size) {
-      const chunk = text.slice(i, i + size).trim();
-      if (chunk) chunks.push({ content: chunk });
-    }
-
-    return chunks;
   }
 }

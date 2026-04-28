@@ -6,14 +6,11 @@ import { documentChunks } from '../../infra/db/schema/document.schema';
 @Injectable()
 export class DocumentRepository {
   constructor(private readonly drizzle: DrizzleService) {}
-  async createChunks(
-    documentId: string,
-    chunks: { content: string; embedding: number[] | null }[],
-  ) {
+  async createChunks(documentId: string, chunks: string[]) {
     const data = chunks.map((chunk) => ({
       documentId,
-      content: chunk.content,
-      embedding: chunk.embedding,
+      content: chunk,
+      embedding: null,
     }));
     return await this.drizzle.db
       .insert(documentChunks)
