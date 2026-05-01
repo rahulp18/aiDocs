@@ -36,4 +36,20 @@ ${query}
 
     return res.choices[0].message.content ?? '';
   }
+  async generateChunk(text: string): Promise<any> {
+    const res = await this.client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a JSON generator. Always return valid JSON only. No extra text.',
+        },
+        { role: 'user', content: text },
+      ],
+      response_format: { type: 'json_object' }, // 🔥 THIS IS KEY
+    });
+    const content = res.choices[0].message.content ?? '{}';
+    return JSON.parse(content);
+  }
 }

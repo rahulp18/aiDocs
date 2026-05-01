@@ -7,7 +7,7 @@ import { ChunkingService } from '../rag/chunking.service';
 import { DocumentRepository } from './document.repository';
 
 import { EmbeddingService } from '../rag/embedding.service';
-import { LlmService } from './llm.service';
+import { LlmService } from '../rag/llm.service';
 
 @Injectable()
 export class DocumentService {
@@ -32,7 +32,7 @@ export class DocumentService {
       throw new BadRequestException('Could not extract text from PDF');
     }
 
-    const chunks = await this.chunkingService.semanticChunk(text);
+    const chunks = await this.chunkingService.agenticChunking(text);
     const documentId = uuid();
 
     // 1️ Insert chunks (embedding = null)

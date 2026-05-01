@@ -4,9 +4,40 @@ import {
 } from '@langchain/textsplitters';
 import { Injectable } from '@nestjs/common';
 import { EmbeddingService } from './embedding.service';
+import { LlmService } from './llm.service';
+const CHUNKING_PROMPT = `
+You are an expert document chunking system.
+
+Task:
+- Split the document into meaningful chunks
+- Each chunk must contain a complete idea
+- Do NOT break sentences
+
+Return STRICT JSON in this format:
+{
+  "chunks": [
+    {
+      "content": "...",
+      "metadata": {
+        "section": "...",
+        "subsection": "...",
+        "type": "..."
+      }
+    }
+  ]
+}
+
+Rules:
+- No extra text
+- No explanation
+- Valid JSON only
+`;
 @Injectable()
 export class ChunkingService {
-  constructor(private readonly embeddingService: EmbeddingService) {}
+  constructor(
+    private readonly embeddingService: EmbeddingService,
+    private readonly llmService: LlmService,
+  ) {}
   async splitFixedSize(
     text: string,
     chunkSize = 500,
@@ -78,5 +109,64 @@ export class ChunkingService {
   }
   private splitSentences(text: string): string[] {
     return text.split(/(?<=[.?!])\s+/).filter((s) => s.trim().length > 0);
+  }
+  private isHeading(line: string): boolean {
+    return line.length < 80 && /^[A-Z][A-Z\s0-9\-:]+$/.test(line.trim());
+  }
+  splitDocumentStructure(text: string) {
+    const lines = text.split('\n');
+
+    const sections: { title: string; content: string[] }[] = [];
+    let currentSection: { title: string; content: string[] } = {
+      title: 'General',
+      content: [],
+    };
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (this.isHeading(trimmed)) {
+        if (currentSection.content.length > 0) {
+          sections.push(currentSection);
+        }
+        currentSection = { title: trimmed, content: [] };
+      } else {
+        currentSection.content.push(trimmed);
+      }
+    }
+    if (currentSection.content.length > 0) {
+      sections.push(currentSection);
+    }
+    return sections;
+  }
+
+  async documentAwareChunking(text: string) {
+    const sections = this.splitDocumentStructure(text);
+    const finalChunks: any[] = [];
+    for (const section of sections) {
+      const chunks = await this.semanticChunk(section.content.join(' '), 0.8);
+      for (const chunk of chunks) {
+        finalChunks.push({
+          content: chunk,
+          metadata: {
+            section: section.title,
+          },
+        });
+      }
+    }
+    return finalChunks;
+  }
+  async agenticChunking(text: string) {
+    const response = await this.llmService.generateChunk(
+      CHUNKING_PROMPT + `\n\nDocument:\n${text}`,
+    );
+
+    // 🔥 FIX HERE
+    if (typeof response === 'string') {
+      return JSON.parse(response);
+    }
+
+    // already parsed
+    return response;
   }
 }
