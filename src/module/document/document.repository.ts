@@ -24,6 +24,12 @@ export class DocumentRepository {
       .where(eq(documentChunks.id, id))
       .returning();
   }
+  async insertChunks(data: any[]) {
+    return await this.drizzle.db
+      .insert(documentChunks)
+      .values(data)
+      .returning();
+  }
   // async searchSimilarChunks(queryEmbedding: number[], limit = 5) {
   //   return await this.drizzle.db.execute(sql`
   //   SELECT
@@ -39,17 +45,18 @@ export class DocumentRepository {
   // }
 
   async searchSimilarChunks(queryEmbedding: number[], limit = 5) {
-    const vector = `'[${queryEmbedding.join(',')}]'`;
+    const vector = `[${queryEmbedding.join(',')}]`;
 
     return await this.drizzle.db.execute(sql`
     SELECT 
       id,
       document_id,
       content,
-      embedding <=> ${sql.raw(`${vector}::vector`)} AS distance
+      metadata,
+      embedding <=> ${vector}::vector AS distance
     FROM document_chunks
     WHERE embedding IS NOT NULL
-    ORDER BY embedding <=> ${sql.raw(`${vector}::vector`)}
+    ORDER BY embedding <=> ${vector}::vector
     LIMIT ${limit};
   `);
   }

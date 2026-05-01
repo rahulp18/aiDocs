@@ -32,9 +32,9 @@ export class DocumentService {
       throw new BadRequestException('Could not extract text from PDF');
     }
 
-    const chunks = await this.chunkingService.agenticChunking(text);
+    const agentResult = await this.chunkingService.agenticChunking(text);
     const documentId = uuid();
-
+    const chunks = agentResult.chunks ?? agentResult;
     // 1️ Insert chunks (embedding = null)
     // const insertedChunks = await this.documentRepository.createChunks(
     //   documentId,
@@ -49,26 +49,44 @@ export class DocumentService {
 
     //   await this.documentRepository.updateEmbedding(chunk.id, embedding);
     // }
-
+    const enrichedChunks = await Promise.all(
+      chunks.map(async (chunk: any) => {
+        const embedding = await this.embeddingService.generateEmbedding(
+          chunk.content,
+        );
+        return {
+          documentId,
+          content: chunk.content,
+          metadata: chunk.metadata,
+          embedding,
+        };
+      }),
+    );
+    await this.documentRepository.insertChunks(enrichedChunks);
     return {
       totalChunks: chunks.length,
       documentId,
-      chunks,
+      chunks: enrichedChunks,
     };
   }
   async search(query: string) {
     if (!query?.trim()) {
       throw new BadRequestException('Query cannot be empty');
     }
+
     const queryEmbedding = await this.embeddingService.generateEmbedding(query);
+
     const results = await this.documentRepository.searchSimilarChunks(
       queryEmbedding,
       10,
     );
-    const THRESHOLD = 0.7;
-    const filtered = results.rows.filter((r: any) => r.distance >= THRESHOLD);
-    const sorted = filtered.sort((a: any, b: any) => b.distance - a.distance);
+
+    const sorted = results.rows.sort(
+      (a: any, b: any) => a.distance - b.distance,
+    );
+
     const topChunk = sorted.slice(0, 5);
+
     if (topChunk.length === 0) {
       return {
         answer: 'No Relevant Information Found',
@@ -76,11 +94,20 @@ export class DocumentService {
       };
     }
 
-    const context = topChunk.map((r) => r.content);
-    const answer = this.llmService.generateAnswer(query, context as string[]);
+    const context = topChunk.map(
+      (r: any) => `
+Section: ${r.metadata?.section}
+Subsection: ${r.metadata?.subsection}
+
+${r.content}
+`,
+    );
+
+    const answer = await this.llmService.generateAnswer(query, context);
+
     return {
       answer,
-      sources: topChunk,
+      // sources: topChunk,
     };
   }
 }
