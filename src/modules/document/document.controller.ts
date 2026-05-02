@@ -1,5 +1,4 @@
 import {
-  Body,
   Controller,
   Post,
   UploadedFile,
@@ -16,10 +15,5 @@ export class DocumentController {
   @UseInterceptors(FileInterceptor('file'))
   uploadDocument(@UploadedFile() file: Express.Multer.File) {
     return this.documentService.processFile(file);
-  }
-  @Post('search')
-  async search(@Body('query') query: string) {
-    console.log({ query });
-    return this.documentService.search(query);
   }
 }
